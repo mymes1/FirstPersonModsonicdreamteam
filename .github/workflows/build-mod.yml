@@ -120,6 +120,21 @@ jobs:
           name: build-log
           path: StArray-Port/Reports/BuildLog.txt
 
+      - name: Verify generated hook surface
+        if: steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          DLL=$(find StArray-Port/Source/bin -name 'FirstPersonCameraMod.dll' | head -1)
+          strings -a "$DLL" | grep -q 'OnManualUpdateOriginal' || { echo "::error::generated hook trampoline missing"; exit 1; }
+          strings -a "$DLL" | grep -q 'InstallHooks' || { echo "::error::generated InstallHooks missing"; exit 1; }
+          strings -a "$DLL" | grep -q 'ModEntryPointAttribute' || { echo "::error::ModEntryPoint missing"; exit 1; }
+          strings -a "$DLL" | grep -q 'IModPlugin' || { echo "::error::IModPlugin missing"; exit 1; }
+          if strings -a "$DLL" | grep -qi 'MelonLoader'; then
+            echo "::error::MelonLoader reference found in output"
+            exit 1
+          fi
+          echo "::notice::output verified: IModPlugin + ModEntryPoint + generated hook trampoline, no MelonLoader"
+
       - name: Upload mod DLL
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4

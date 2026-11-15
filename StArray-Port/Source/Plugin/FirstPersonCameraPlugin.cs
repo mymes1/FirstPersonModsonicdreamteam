@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FirstPersonCamera.Port.Camera;
+using FirstPersonCamera.Port.Diagnostics;
 using FirstPersonCamera.Port.Hooks;
 using FirstPersonCamera.Port.Runtime;
 using ImGuiNET;
@@ -75,6 +76,8 @@ public sealed class FirstPersonCameraPlugin : IModPlugin, IModSettings
         // The original Harmony prefix on CinemachineBrain.ManualUpdate.
         if (!CinemachineHook.TryInstall(_controller))
             Logger.Warn(Name, "Cinemachine hook not installed — the view switcher (manual collapse) stays available.");
+
+        SelfTest.Run();
 
         Logger.Info(Name, "Loaded. F5 / L3 / R3 / on-screen FP CAM toggles first-person.");
     }

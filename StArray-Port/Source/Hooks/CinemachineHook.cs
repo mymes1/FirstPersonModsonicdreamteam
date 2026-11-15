@@ -96,7 +96,9 @@ internal static class CinemachineHook
 /// generate <c>InstallHooks</c>, <c>UninstallHooks</c> and the <c>OnManualUpdateOriginal</c>
 /// trampoline.
 /// </summary>
-internal static partial class CinemachineManualUpdateHook
+// Must match the modifier set the generator emits ("{access} unsafe partial class"),
+// otherwise the two halves of the partial type do not merge (CS0260/CS0227).
+internal static unsafe partial class CinemachineManualUpdateHook
 {
     [NativeHook(nameof(ResolveManualUpdate), Convention = System.Runtime.InteropServices.CallingConvention.Cdecl)]
     private static void OnManualUpdate(nint thiz)
