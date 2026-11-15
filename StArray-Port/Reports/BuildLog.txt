@@ -1,11 +1,11 @@
   Determining projects to restore...
-  Restored /home/runner/work/FirstPersonModsonicdreamteam/FirstPersonModsonicdreamteam/StArray-Port/Source/FirstPersonCameraMod.csproj (in 3 ms).
+  Restored /home/runner/work/FirstPersonModsonicdreamteam/FirstPersonModsonicdreamteam/StArray-Port/Source/FirstPersonCameraMod.csproj (in 4 ms).
   FirstPersonCameraMod -> /home/runner/work/FirstPersonModsonicdreamteam/FirstPersonModsonicdreamteam/StArray-Port/Source/bin/Release/FirstPersonCameraMod.dll
 
 Build succeeded.
     0 Warning(s)
     0 Error(s)
 
-Time Elapsed 00:00:01.80
+Time Elapsed 00:00:02.82
 
 == distinct diagnostics ==
