@@ -17,6 +17,9 @@
     <!-- Android ARM64-v8a (Unity IL2CPP on Project Dream). -->
     <Platforms>AnyCPU;ARM64</Platforms>
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <!-- Only this port's sources compile. Defaulting to **/*.cs would sweep in the checked-in
+         obj/ artifacts from the original desktop project (which contain a stub harness that
+         declares the same assembly name) and silently produce a DLL with none of the port in it. -->
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
 
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
@@ -30,7 +33,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="**/*.cs" Exclude="bin/**;obj/**" />
+    <Compile Include="Runtime/**/*.cs" />
+    <Compile Include="Camera/**/*.cs" />
+    <Compile Include="Hooks/**/*.cs" />
+    <Compile Include="Plugin/**/*.cs" />
+    <Compile Include="Diagnostics/**/*.cs" />
   </ItemGroup>
 
   <!--

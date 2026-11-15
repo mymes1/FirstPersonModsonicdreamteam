@@ -1,8 +1,10 @@
 name: Build StArray Port
 
 # Compiles StArray-Port/Source against the REAL StArray.ModManager release assemblies
-# (modmanager-android 1.0.6) plus the analyzer built from the StArray source tree, then publishes
-# the resulting DLL back to StArray-Port/Build/ so it can be picked up for device testing.
+# (modmanager-android 1.0.6) plus the analyzer built from the StArray source tree, then
+#   1. reports every compiler diagnostic as a check annotation (readable without any download),
+#   2. keeps the full compiler log in StArray-Port/Reports/BuildLog.txt,
+#   3. publishes the DLL to StArray-Port/Build/ only when the build actually succeeded.
 
 on:
   push:
@@ -22,10 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check out the working branch (not detached HEAD)
-        run: |
-          git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
+        with:
+          ref: ${{ github.ref_name }}
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -64,50 +64,100 @@ jobs:
           cp /tmp/starray-analyzer/StArray.ModManager.Analyzer.dll StArray-Port/lib/
           ls -la StArray-Port/lib
 
-      - name: Build mod (Release, ARM64)
+      # The port's project file only compiles Runtime/ Camera/ Hooks/ Plugin/ Diagnostics/.
+      # Stale bin/obj from the original desktop project must still go, so a build can never be
+      # satisfied by leftovers from an earlier configuration.
+      - name: Remove stale build output
+        run: |
+          rm -rf StArray-Port/Source/bin StArray-Port/Source/obj
+          find StArray-Port/Source -name '*.cs' | sed 's/^/  /'
+
+      - name: Build mod (Release)
         id: build
         continue-on-error: true
         run: |
           set -o pipefail
-          dotnet build StArray-Port/Source/FirstPersonCameraMod.csproj \
-            -c Release -p:Platform=ARM64 \
+          mkdir -p StArray-Port/Reports
+          dotnet build StArray-Port/Source/FirstPersonCameraMod.csproj -c Release \
             2>&1 | tee StArray-Port/Reports/BuildLog.txt
-          echo "== distinct diagnostics ==" >> StArray-Port/Reports/BuildLog.txt
-          grep -E "error [A-Z]+[0-9]+" StArray-Port/Reports/BuildLog.txt | sed 's/ \[.*//' | sort -u \
-            >> StArray-Port/Reports/BuildLog.txt || true
+          {
+            echo ""
+            echo "== distinct diagnostics =="
+            grep -E "error [A-Z]+[0-9]+" StArray-Port/Reports/BuildLog.txt | sed 's/ \[\/.*//' | sort -u || true
+          } >> StArray-Port/Reports/BuildLog.txt
 
-      # Compiler diagnostics as check annotations — readable without downloading the artifact.
+          ERRS=$(grep -cE "error [A-Z]+[0-9]+" StArray-Port/Reports/BuildLog.txt || true)
+          echo "compiler errors reported: $ERRS"
+          test "$ERRS" = "0"
+
+      # Compiler diagnostics become annotations, visible without downloading any artifact.
       - name: Surface compiler diagnostics
         if: always()
         run: |
-          grep -E "error [A-Z]+[0-9]+|warning CS" StArray-Port/Reports/BuildLog.txt | sort -u | head -25 | while IFS= read -r line; do
-            echo "::error::$(echo "$line" | sed 's/\[.*//' | tr -d '\r')"
-          done
+          set +e
+          grep -E "error [A-Z]+[0-9]+" StArray-Port/Reports/BuildLog.txt \
+            | sed 's/ \[\/.*//' | sort -u | head -25 > /tmp/errors.txt
+          echo "::notice::compiler errors: $(wc -l < /tmp/errors.txt)"
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            echo "::error::$(echo "$line" | tr -d '\r')"
+          done < /tmp/errors.txt
 
-      - name: Publish build output into the repo
+          grep -E "warning CS" StArray-Port/Reports/BuildLog.txt \
+            | sed 's/ \[\/.*//' | sort -u | head -10 > /tmp/warnings.txt
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            echo "::warning::$(echo "$line" | tr -d '\r')"
+          done < /tmp/warnings.txt
+
+          tail -6 StArray-Port/Reports/BuildLog.txt | tr -d '\r' | sed 's/^/    /' > /tmp/tail.txt
+          while IFS= read -r line; do echo "::notice::TAIL$line"; done < /tmp/tail.txt
+
+      - name: Upload build log
         if: always()
-        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: StArray-Port/Reports/BuildLog.txt
+
+      - name: Upload mod DLL
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FirstPersonCameraMod
+          path: StArray-Port/Source/bin/**/FirstPersonCameraMod.dll
+
+      - name: Publish DLL and log into the repo
+        if: always()
         run: |
-          exec 2>&1
-          set -x
-          SRC=$(find StArray-Port/Source/bin -name 'FirstPersonCameraMod.dll' 2>/dev/null | head -1 || true)
-          echo "SRC=$SRC"
-          echo "outcome=${{ steps.build.outcome }}"
-          if [ -n "$SRC" ]; then
+          set +e
+          SRC=$(find StArray-Port/Source/bin -name 'FirstPersonCameraMod.dll' | head -1)
+          echo "found DLL: ${SRC:-<none>} (build outcome: ${{ steps.build.outcome }})"
+
+          if [ "${{ steps.build.outcome }}" = "success" ] && [ -n "$SRC" ]; then
             mkdir -p StArray-Port/Build
-            cp "$SRC" StArray-Port/Build/FirstPersonCameraMod.dll || true
-            ls -la StArray-Port/Build
+            cp "$SRC" StArray-Port/Build/FirstPersonCameraMod.dll
+            ls -l StArray-Port/Build/FirstPersonCameraMod.dll
           fi
+
           git config user.name "starray-build-bot"
           git config user.email "build-bot@users.noreply.github.com"
-          git add -f StArray-Port/Reports/BuildLog.txt 2>&1 || true
-          git add -f StArray-Port/Build/FirstPersonCameraMod.dll 2>&1 || true
-          git status --short 2>&1 || true
-          git commit -m "build: compiler log + DLL (outcome: ${{ steps.build.outcome }})" 2>&1 || true
-          git remote -v 2>&1 || true
-          git log --oneline -2 2>&1 || true
-          git push origin "HEAD:${{ github.ref_name }}" 2>&1 || true
-          git log --oneline -1 origin/"${{ github.ref_name }}" 2>&1 || true
+          git add -f StArray-Port/Reports/BuildLog.txt
+          if [ "${{ steps.build.outcome }}" = "success" ] && [ -n "$SRC" ]; then
+            git add -f StArray-Port/Build/FirstPersonCameraMod.dll
+          fi
+
+          if git diff --cached --quiet; then
+            echo "::notice::nothing to publish"
+            exit 0
+          fi
+
+          git commit -q -m "build: compiler log + DLL (build outcome: ${{ steps.build.outcome }})"
+          if git push origin "HEAD:${{ github.ref_name }}" > /tmp/push.log 2>&1; then
+            echo "::notice::published build output to ${{ github.ref_name }}"
+          else
+            echo "::error::git push failed: $(tr '\n' ' ' < /tmp/push.log | head -c 900)"
+          fi
 
       - name: Fail if the build failed
         if: steps.build.outcome != 'success'
