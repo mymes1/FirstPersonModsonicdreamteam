@@ -12,7 +12,7 @@
 | Item | Value |
 |---|---|
 | Output | `StArray-Port/Build/FirstPersonCameraMod.dll` |
-| Size / SHA-256 | 54,272 bytes / `82ada62253de5c09943fe820a79e5aa91e84818793e36c98c7c9cca0536df115` |
+| Size / SHA-256 | 53,760 bytes / `d2eca3675530bff93cf7da9b5d408fb6defac4cfe93604246ea934e3153f7ac1` |
 | Target framework | `.NETCoreApp,Version=v10.0` (baked into the assembly; matches the CoreCLR 10.0.6 the StArray Android AAR ships) |
 | Compiler | .NET SDK 10 (GitHub Actions `ubuntu-latest`), `dotnet build -c Release` |
 | References | `StArray.ModManager.dll`, `ImGui.NET.dll` — both extracted from the **real** release `modmanager-android.zip` 1.0.6 |
