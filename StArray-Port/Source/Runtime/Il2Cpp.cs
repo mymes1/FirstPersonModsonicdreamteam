@@ -27,7 +27,7 @@ namespace FirstPersonCamera.Port.Runtime;
 /// the managed-only call path instead of crashing the game.
 /// </para>
 /// </summary>
-internal static class Il2CppNative
+internal static unsafe class Il2CppNative
 {
     private const string Library = "libil2cpp.so";
 
