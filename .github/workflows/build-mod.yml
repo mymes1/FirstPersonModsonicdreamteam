@@ -86,30 +86,28 @@ jobs:
 
       - name: Publish build output into the repo
         if: always()
+        continue-on-error: true
         run: |
-          set -euo pipefail
+          exec 2>&1
+          set -x
           SRC=$(find StArray-Port/Source/bin -name 'FirstPersonCameraMod.dll' 2>/dev/null | head -1 || true)
-          if [ -n "$SRC" ] && [ "${{ steps.build.outcome }}" = "success" ]; then
+          echo "SRC=$SRC"
+          echo "outcome=${{ steps.build.outcome }}"
+          if [ -n "$SRC" ]; then
             mkdir -p StArray-Port/Build
-            cp "$SRC" StArray-Port/Build/FirstPersonCameraMod.dll
+            cp "$SRC" StArray-Port/Build/FirstPersonCameraMod.dll || true
+            ls -la StArray-Port/Build
           fi
-
           git config user.name "starray-build-bot"
           git config user.email "build-bot@users.noreply.github.com"
-          git add -f StArray-Port/Reports/BuildLog.txt
-          if [ -n "$SRC" ] && [ "${{ steps.build.outcome }}" = "success" ]; then
-            git add -f StArray-Port/Build/FirstPersonCameraMod.dll
-          fi
-          git diff --cached --quiet && exit 0
-          git commit -m "build: compiler log + DLL (outcome: ${{ steps.build.outcome }})"
-
-          for i in 1 2 3 4 5; do
-            if git push origin "${{ github.ref_name }}"; then exit 0; fi
-            git fetch origin "${{ github.ref_name }}" || true
-            git rebase "origin/${{ github.ref_name }}" || true
-            sleep 3
-          done
-          echo "::warning::could not push built DLL"
+          git add -f StArray-Port/Reports/BuildLog.txt 2>&1 || true
+          git add -f StArray-Port/Build/FirstPersonCameraMod.dll 2>&1 || true
+          git status --short 2>&1 || true
+          git commit -m "build: compiler log + DLL (outcome: ${{ steps.build.outcome }})" 2>&1 || true
+          git remote -v 2>&1 || true
+          git log --oneline -2 2>&1 || true
+          git push origin "HEAD:${{ github.ref_name }}" 2>&1 || true
+          git log --oneline -1 origin/"${{ github.ref_name }}" 2>&1 || true
 
       - name: Fail if the build failed
         if: steps.build.outcome != 'success'
