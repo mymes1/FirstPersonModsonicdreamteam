@@ -68,7 +68,11 @@ public sealed class FirstPersonCameraPlugin : IModPlugin, IModSettings
         GameApi.Initialise();
 
         _controller = new FirstPersonCameraController();
-        _controller.Enabled = StartEnabled;
+
+        // "Enabled" is persisted in the camera's own settings block (same key the desktop mod used),
+        // so it is the single source of truth; StartEnabled only seeds the very first session.
+        _controller.Enabled = StartEnabled || _controller.Enabled;
+        StartEnabled = _controller.Enabled;
 
         _behaviour = new FirstPersonCameraBehaviour(this, _controller);
         BehaviourManager.Add(_behaviour);
@@ -169,6 +173,7 @@ public sealed class FirstPersonCameraPlugin : IModPlugin, IModSettings
     internal void ToggleFromHud()
     {
         var state = _controller.Toggle();
+        _controller.Enabled = state;
         StartEnabled = state;
         Logger.Info(Name, $"Toggled from HUD → {(state ? "ON" : "OFF")}");
     }

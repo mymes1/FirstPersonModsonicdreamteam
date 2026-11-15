@@ -96,6 +96,7 @@ public sealed class FirstPersonCameraBehaviour : GameBehaviour
         {
             Logger.Info("FirstPersonCamera", "Scene changed — resetting camera state.");
             _controller.OnSceneLoaded();
+            SceneProbe.Reset();
             CinemachineHook.Reinstall(_controller);
         }
 

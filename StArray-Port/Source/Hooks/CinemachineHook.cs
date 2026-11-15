@@ -120,7 +120,6 @@ internal static unsafe partial class CinemachineManualUpdateHook
 internal static class Il2CppNativeLocator
 {
     private const string Il2CppLibraryPath = "/system/lib64/libil2cpp.so";
-    private const string Il2CppLibraryName = "libil2cpp.so";
 
     /// <summary>Il2Cpp symbol mangling for <c>ManualUpdate</c>, most specific first.</summary>
     private static readonly string[] Candidates =
@@ -186,6 +185,4 @@ internal static class Il2CppNativeLocator
         _searched = false;
         _cachedSymbol = null;
     }
-
-    internal static string LibraryName => Il2CppLibraryName;
 }

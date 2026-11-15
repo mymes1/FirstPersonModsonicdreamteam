@@ -428,6 +428,8 @@ public sealed class FirstPersonCameraController
 
     private void UpdateLook(float deltaTime)
     {
+        if (deltaTime <= 0f) deltaTime = 1f / 60f;
+
         float mouseX = 0f, mouseY = 0f;
         PointerLook.Read(out mouseX, out mouseY);
 
@@ -466,6 +468,9 @@ public sealed class FirstPersonCameraController
     private void PositionCamera(float deltaTime)
     {
         if (_camera == 0 || Il2Cpp.ObjectGetClass(_camera) == 0) return;
+
+        // A paused frame reports deltaTime 0, which would make every Lerp a no-op forever.
+        if (deltaTime <= 0f) deltaTime = 1f / 60f;
 
         var cameraTransform = new TransformRef(Il2Cpp.InvokeInstance(_camera, "get_transform", 0, null));
         if (!cameraTransform.IsValid) return;
