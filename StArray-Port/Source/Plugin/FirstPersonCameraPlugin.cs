@@ -69,7 +69,7 @@ public sealed class FirstPersonCameraPlugin : IModPlugin, IModSettings
         _controller = new FirstPersonCameraController();
         _controller.Enabled = StartEnabled;
 
-        _behaviour = new FirstPersonCameraBehaviour(_controller);
+        _behaviour = new FirstPersonCameraBehaviour(this, _controller);
         BehaviourManager.Add(_behaviour);
 
         // The original Harmony prefix on CinemachineBrain.ManualUpdate.

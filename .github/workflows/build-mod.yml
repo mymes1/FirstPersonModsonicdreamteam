@@ -1,8 +1,8 @@
 name: Build StArray Port
 
 # Compiles StArray-Port/Source against the REAL StArray.ModManager release assemblies
-# (modmanager-android 1.0.6) and the analyzer built from the StArray source tree, then publishes
-# the DLL as an artifact. This is the build that produces StArray-Port/Build/FirstPersonCameraMod.dll.
+# (modmanager-android 1.0.6) plus the analyzer built from the StArray source tree, then publishes
+# the resulting DLL back to StArray-Port/Build/ so it can be picked up for device testing.
 
 on:
   push:
@@ -13,6 +13,9 @@ on:
       - 'StArray-Port/**'
       - '.github/workflows/build-mod.yml'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -34,9 +37,8 @@ jobs:
             --repo StArraySharp/StArray.ModManager \
             --pattern 'modmanager-android.zip' \
             --dir /tmp/starray-release
-          ls -la /tmp/starray-release
           unzip -o -q /tmp/starray-release/modmanager-android.zip -d /tmp/starray-release/extracted
-          find /tmp/starray-release/extracted -name '*.dll' | head -50
+          find /tmp/starray-release/extracted -name '*.dll' | head -40
 
       - name: Stage StArray.ModManager.dll and ImGui.NET.dll
         run: |
@@ -67,22 +69,55 @@ jobs:
             -c Release -p:Platform=ARM64 \
             2>&1 | tee StArray-Port/Reports/BuildLog.txt
 
-      - name: Publish build log
+      # Compiler diagnostics as check annotations — readable without downloading the artifact.
+      - name: Surface compiler diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: StArray-Port/Reports/BuildLog.txt
+        run: |
+          grep -E "error [A-Z]+[0-9]+|warning CS" StArray-Port/Reports/BuildLog.txt | sort -u | head -25 | while IFS= read -r line; do
+            echo "::error::$(echo "$line" | sed 's/\[.*//' | tr -d '\r')"
+          done
 
-      - name: Publish mod DLL
+      - name: Report result to commit
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.build.outcome }}" = "success" ]; then
+            STATUS="BUILD SUCCESS"
+          else
+            STATUS="BUILD FAILED"
+          fi
+          {
+            echo "### StArray port build: $STATUS"
+            echo ""
+            echo '```'
+            tail -c 50000 StArray-Port/Reports/BuildLog.txt
+            echo '```'
+          } > /tmp/comment.md
+          gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -F body=@/tmp/comment.md > /dev/null || echo "comment failed"
+
+      - name: Publish DLL into the repo
         if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: FirstPersonCameraMod
-          path: StArray-Port/Source/bin/Release/FirstPersonCameraMod.dll
+        run: |
+          set -euo pipefail
+          SRC=$(find StArray-Port/Source/bin -name 'FirstPersonCameraMod.dll' | head -1)
+          test -n "$SRC"
+          mkdir -p StArray-Port/Build
+          cp "$SRC" StArray-Port/Build/FirstPersonCameraMod.dll
+
+          git config user.name "starray-build-bot"
+          git config user.email "build-bot@users.noreply.github.com"
+          git add -f StArray-Port/Build/FirstPersonCameraMod.dll StArray-Port/Reports/BuildLog.txt
+          git commit -m "build: FirstPersonCameraMod.dll (Release, net10.0, ARM64)" || exit 0
+
+          for i in 1 2 3 4 5; do
+            if git push; then exit 0; fi
+            git pull --rebase --autostash origin "${{ github.ref_name }}" || true
+            sleep 3
+          done
+          echo "::warning::could not push built DLL"
 
       - name: Fail if the build failed
         if: steps.build.outcome != 'success'
-        run: |
-          echo "Build failed — see the build-log artifact / StArray-Port/Reports/BuildLog.txt"
-          exit 1
+        run: exit 1

@@ -17,10 +17,10 @@
     <!-- Android ARM64-v8a (Unity IL2CPP on Project Dream). -->
     <Platforms>AnyCPU;ARM64</Platforms>
     <PlatformTarget>AnyCPU</PlatformTarget>
-    <RuntimeIdentifier>linux-arm64</RuntimeIdentifier>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
 
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <NoWarn>$(NoWarn);NU1701;CS0618</NoWarn>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
