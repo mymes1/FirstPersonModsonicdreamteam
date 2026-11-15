@@ -1,0 +1,88 @@
+name: Build StArray Port
+
+# Compiles StArray-Port/Source against the REAL StArray.ModManager release assemblies
+# (modmanager-android 1.0.6) and the analyzer built from the StArray source tree, then publishes
+# the DLL as an artifact. This is the build that produces StArray-Port/Build/FirstPersonCameraMod.dll.
+
+on:
+  push:
+    branches:
+      - arena/b9d8301a-firstpersonmodsonicdreamteam
+      - main
+    paths:
+      - 'StArray-Port/**'
+      - '.github/workflows/build-mod.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Fetch StArray release assemblies
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p StArray-Port/lib
+          gh release download 1.0.6 \
+            --repo StArraySharp/StArray.ModManager \
+            --pattern 'modmanager-android.zip' \
+            --dir /tmp/starray-release
+          ls -la /tmp/starray-release
+          unzip -o -q /tmp/starray-release/modmanager-android.zip -d /tmp/starray-release/extracted
+          find /tmp/starray-release/extracted -name '*.dll' | head -50
+
+      - name: Stage StArray.ModManager.dll and ImGui.NET.dll
+        run: |
+          set -euo pipefail
+          MANAGER=$(find /tmp/starray-release/extracted -name 'StArray.ModManager.dll' | head -1)
+          IMGUI=$(find /tmp/starray-release/extracted -name 'ImGui.NET.dll' | head -1)
+          test -n "$MANAGER"
+          test -n "$IMGUI"
+          cp "$MANAGER" StArray-Port/lib/StArray.ModManager.dll
+          cp "$IMGUI" StArray-Port/lib/ImGui.NET.dll
+          ls -la StArray-Port/lib
+
+      - name: Build StArray analyzer from source
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/StArraySharp/StArray.ModManager.git /tmp/starray-src
+          dotnet build /tmp/starray-src/StArray.ModManager.Analyzer/StArray.ModManager.Analyzer.csproj \
+            -c Release -o /tmp/starray-analyzer
+          cp /tmp/starray-analyzer/StArray.ModManager.Analyzer.dll StArray-Port/lib/
+          ls -la StArray-Port/lib
+
+      - name: Build mod (Release, ARM64)
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dotnet build StArray-Port/Source/FirstPersonCameraMod.csproj \
+            -c Release -p:Platform=ARM64 \
+            2>&1 | tee StArray-Port/Reports/BuildLog.txt
+
+      - name: Publish build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: StArray-Port/Reports/BuildLog.txt
+
+      - name: Publish mod DLL
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FirstPersonCameraMod
+          path: StArray-Port/Source/bin/Release/FirstPersonCameraMod.dll
+
+      - name: Fail if the build failed
+        if: steps.build.outcome != 'success'
+        run: |
+          echo "Build failed — see the build-log artifact / StArray-Port/Reports/BuildLog.txt"
+          exit 1

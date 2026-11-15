@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- StArray.ModManager (Android bundle, release 1.0.6) ships CoreCLR 10.0.6, so net10.0 is the
+         framework the installed runtime actually provides. Targeting anything lower means the
+         manager cannot load the assembly into the same runtime. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <AssemblyName>FirstPersonCameraMod</AssemblyName>
+    <RootNamespace>FirstPersonCamera.Port</RootNamespace>
+    <OutputType>Library</OutputType>
+
+    <!-- Android ARM64-v8a (Unity IL2CPP on Project Dream). -->
+    <Platforms>AnyCPU;ARM64</Platforms>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <RuntimeIdentifier>linux-arm64</RuntimeIdentifier>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="**/*.cs" Exclude="bin/**;obj/**" />
+  </ItemGroup>
+
+  <!--
+    REAL StArray assemblies — not fabricated stubs.
+
+    Preferred layout (what the build pipeline in .github/workflows/build-mod.yml prepares):
+
+      StArray-Port/lib/StArray.ModManager.dll        ← from modmanager-android-1.0.6.zip
+      StArray-Port/lib/ImGui.NET.dll                 ← same release
+      StArray-Port/lib/StArray.ModManager.Analyzer.dll ← built from the StArray source tree
+
+    Set StArrayLibDir to override the location. The analyzer (which generates InstallHooks /
+    UninstallHooks / *Original for every [NativeHook]) is referenced the way the manager itself
+    references it: as an Analyzer assembly, not a compile-time reference.
+  -->
+  <PropertyGroup>
+    <StArrayLibDir Condition="'$(StArrayLibDir)' == ''">$(MSBuildProjectDirectory)/../lib</StArrayLibDir>
+    <StArrayManagerDll>$(StArrayLibDir)/StArray.ModManager.dll</StArrayManagerDll>
+    <StArrayAnalyzerDll>$(StArrayLibDir)/StArray.ModManager.Analyzer.dll</StArrayAnalyzerDll>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="StArray.ModManager">
+      <HintPath>$(StArrayManagerDll)</HintPath>
+      <Private>False</Private>
+      <!-- The manager already ships this assembly; never copy our own copy next to the mod. -->
+    </Reference>
+    <Reference Include="ImGui.NET">
+      <HintPath>$(StArrayLibDir)/ImGui.NET.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('$(StArrayAnalyzerDll)')">
+    <Analyzer Include="$(StArrayAnalyzerDll)" />
+  </ItemGroup>
+
+  <Target Name="EnsureStArrayReferences" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(StArrayManagerDll)')"
+           Text="StArray.ModManager.dll not found at $(StArrayManagerDll). Point StArrayLibDir at the real release assemblies (see Reports/ConversionReport.md)." />
+  </Target>
+
+</Project>
