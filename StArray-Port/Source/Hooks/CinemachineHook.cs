@@ -1,3 +1,4 @@
+using System;
 using FirstPersonCamera.Port.Camera;
 using FirstPersonCamera.Port.Runtime;
 using StArray.ModManager.Hooks;

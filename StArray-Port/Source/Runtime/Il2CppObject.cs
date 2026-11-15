@@ -26,7 +26,7 @@ public sealed class ObjectHandle : IDisposable
     public ObjectHandle(nint ptr)
     {
         if (ptr != 0)
-            _handle = Il2Cpp.il2cpp_gchandle_new(ptr, false);
+            _handle = Il2Cpp.GCHandleNew(ptr);
     }
 
     /// <summary>
@@ -37,7 +37,7 @@ public sealed class ObjectHandle : IDisposable
         get
         {
             if (_disposed || _handle == 0) return 0;
-            return Il2Cpp.il2cpp_gchandle_get_target(_handle);
+            return Il2Cpp.GCHandleGetTarget(_handle);
         }
     }
 
@@ -50,7 +50,7 @@ public sealed class ObjectHandle : IDisposable
         _disposed = true;
         if (_handle != 0)
         {
-            Il2Cpp.il2cpp_gchandle_free(_handle);
+            Il2Cpp.GCHandleFree(_handle);
             _handle = 0;
         }
     }
@@ -208,7 +208,7 @@ public readonly struct TransformRef
             var method = Il2Cpp.FindMethodInHierarchy(
                 Il2Cpp.ObjectGetClass(Ptr),
                 "SetPositionAndRotation",
-                m => m.ParamCount == 2,
+                m => Il2CppNative.GetParamCount(m) == 2,
                 new[] { "UnityEngine.Vector3", "UnityEngine.Quaternion" });
 
             if (method == 0) return;

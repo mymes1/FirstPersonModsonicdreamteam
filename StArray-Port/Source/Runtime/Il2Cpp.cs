@@ -179,6 +179,64 @@ internal static class Il2Cpp
     /// <summary>Roots an object for the lifetime of the handle.</summary>
     internal static ObjectHandle Root(nint ptr) => new(ptr);
 
+    // ── GC handles ──
+    // il2cpp_gchandle_* live on Il2CppFunctions (internal), so they are bound once through
+    // StArrayBridge and cached as typed delegates.
+
+    private static GCHandleNewFn _gchandleNew;
+    private static GCHandleTargetFn _gchandleGetTarget;
+    private static GCHandleFreeFn _gchandleFree;
+    private static bool _gchandleResolved;
+
+    private delegate nint GCHandleNewFn(nint obj, bool pinned);
+    private delegate nint GCHandleTargetFn(nint handle);
+    private delegate void GCHandleFreeFn(nint handle);
+
+    private static void ResolveGCHandles()
+    {
+        if (_gchandleResolved) return;
+        _gchandleResolved = true;
+
+        var functions = StArrayBridge.FindType("StArray.ModManager.Il2Cpp.Il2CppFunctions");
+        _gchandleNew = StArrayBridge.Delegate<GCHandleNewFn>("il2cpp_gchandle_new", functions,
+            "il2cpp_gchandle_new", 2);
+        _gchandleGetTarget = StArrayBridge.Delegate<GCHandleTargetFn>("il2cpp_gchandle_get_target",
+            functions, "il2cpp_gchandle_get_target", 1);
+        _gchandleFree = StArrayBridge.Delegate<GCHandleFreeFn>("il2cpp_gchandle_free", functions,
+            "il2cpp_gchandle_free", 1);
+    }
+
+    /// <summary>Strong GC root for an IL2CPP object; 0 on failure (unsafe pinning is never used).</summary>
+    internal static nint GCHandleNew(nint obj)
+    {
+        if (obj == 0) return 0;
+        ResolveGCHandles();
+        if (_gchandleNew == null) return 0;
+
+        try { return _gchandleNew(obj, false); }
+        catch { return 0; }
+    }
+
+    internal static nint GCHandleGetTarget(nint handle)
+    {
+        if (handle == 0) return 0;
+        ResolveGCHandles();
+        if (_gchandleGetTarget == null) return 0;
+
+        try { return _gchandleGetTarget(handle); }
+        catch { return 0; }
+    }
+
+    internal static void GCHandleFree(nint handle)
+    {
+        if (handle == 0) return;
+        ResolveGCHandles();
+        if (_gchandleFree == null) return;
+
+        try { _gchandleFree(handle); }
+        catch { }
+    }
+
     internal static nint ObjectGetClass(nint obj) => obj == 0 ? 0 : Il2CppNative.ObjectGetClass(obj);
 
     // ── Class / method resolution ──
