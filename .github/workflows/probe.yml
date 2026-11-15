@@ -1,0 +1,9 @@
+name: probe
+on:
+  push:
+    branches: [ arena/b9d8301a-firstpersonmodsonicdreamteam ]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: dotnet --version && echo OK
