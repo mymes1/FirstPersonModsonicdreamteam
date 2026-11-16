@@ -1,0 +1,29 @@
+# ── .NET build output ────────────────────────────────────────────────────────────────
+# These were committed to this repository at some point (a full Debug/net6.0 MelonLoader
+# build of the original desktop mod). They are now ignored so a stale binary can never be
+# mistaken for — or silently substituted into — a fresh build.
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.dll
+*.pdb
+*.deps.json
+*.cache
+*.FileListAbsolute.txt
+
+# ── The port keeps its deliverables on purpose ──────────────────────────────────────
+!StArray-Port/Build/*.dll
+
+# ── Staged reference assemblies (fetched by CI from the StArray release) ─────────────
+StArray-Port/lib/
+
+# ── Unity / IDE / OS noise ──────────────────────────────────────────────────────────
+.vs/
+.idea/
+*.user
+*.suo
+*.swp
+*~
+.DS_Store
+Thumbs.db

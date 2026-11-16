@@ -1,0 +1,203 @@
+name: Build StArray Port
+
+# Compiles StArray-Port/Source against the REAL StArray.ModManager release assemblies
+# (modmanager-android 1.0.6) plus the analyzer built from the StArray source tree, then
+#   1. reports every compiler diagnostic as a check annotation (readable without any download),
+#   2. keeps the full compiler log in StArray-Port/Reports/BuildLog.txt,
+#   3. publishes the DLL to StArray-Port/Build/ only when the build actually succeeded.
+
+on:
+  push:
+    branches:
+      - arena/b9d8301a-firstpersonmodsonicdreamteam
+      - main
+    paths:
+      - 'StArray-Port/**'
+      - '.github/workflows/build-mod.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Fetch StArray release assemblies
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p StArray-Port/lib
+          gh release download 1.0.6 \
+            --repo StArraySharp/StArray.ModManager \
+            --pattern 'modmanager-android.zip' \
+            --dir /tmp/starray-release
+          unzip -o -q /tmp/starray-release/modmanager-android.zip -d /tmp/starray-release/extracted
+          find /tmp/starray-release/extracted -name '*.dll' | head -40
+
+      - name: Stage StArray.ModManager.dll and ImGui.NET.dll
+        run: |
+          set -euo pipefail
+          MANAGER=$(find /tmp/starray-release/extracted -name 'StArray.ModManager.dll' | head -1)
+          IMGUI=$(find /tmp/starray-release/extracted -name 'ImGui.NET.dll' | head -1)
+          test -n "$MANAGER"
+          test -n "$IMGUI"
+          cp "$MANAGER" StArray-Port/lib/StArray.ModManager.dll
+          cp "$IMGUI" StArray-Port/lib/ImGui.NET.dll
+          ls -la StArray-Port/lib
+
+      - name: Build StArray analyzer from source
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/StArraySharp/StArray.ModManager.git /tmp/starray-src
+          dotnet build /tmp/starray-src/StArray.ModManager.Analyzer/StArray.ModManager.Analyzer.csproj \
+            -c Release -o /tmp/starray-analyzer
+          cp /tmp/starray-analyzer/StArray.ModManager.Analyzer.dll StArray-Port/lib/
+          ls -la StArray-Port/lib
+
+      - name: Repo hygiene gate (no committed build output, no desktop leftovers)
+        run: |
+          set -euo pipefail
+          echo "── tracked build output ──"
+          if git ls-files | grep -E '^(bin|obj)/|/bin/|/obj/'; then
+            echo "::error::build output is committed; remove it and rely on .gitignore"
+            exit 1
+          fi
+
+          echo "── original desktop project must not reference the port ──"
+          if grep -nE 'StArray|FirstPersonCamera\.Port' FirstPersonCameraMod.cs 2>/dev/null; then
+            echo "::error::original MelonLoader source was modified"
+            exit 1
+          fi
+
+          echo "── port sources must not use the MelonLoader stack ──"
+          if grep -rnE 'using MelonLoader|HarmonyLib|Il2CppInterop|Il2CppCinemachine|Il2CppHardlightProject|OnInitializeMelon' \
+               StArray-Port/Source --include='*.cs' --include='*.csproj'; then
+            echo "::error::MelonLoader / Harmony / interop reference in the port"
+            exit 1
+          fi
+
+          echo "::notice::hygiene gate passed"
+
+      # The port's project file only compiles Runtime/ Camera/ Hooks/ Plugin/ Diagnostics/.
+      # Stale bin/obj from the original desktop project must still go, so a build can never be
+      # satisfied by leftovers from an earlier configuration.
+      - name: Remove stale build output
+        run: |
+          rm -rf StArray-Port/Source/bin StArray-Port/Source/obj
+          find StArray-Port/Source -name '*.cs' | sed 's/^/  /'
+
+      - name: Build mod (Release)
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p StArray-Port/Reports
+          dotnet build StArray-Port/Source/FirstPersonCameraMod.csproj -c Release \
+            2>&1 | tee StArray-Port/Reports/BuildLog.txt
+          {
+            echo ""
+            echo "== distinct diagnostics =="
+            grep -E "error [A-Z]+[0-9]+" StArray-Port/Reports/BuildLog.txt | sed 's/ \[\/.*//' | sort -u || true
+          } >> StArray-Port/Reports/BuildLog.txt
+
+          ERRS=$(grep -cE "error [A-Z]+[0-9]+" StArray-Port/Reports/BuildLog.txt || true)
+          echo "compiler errors reported: $ERRS"
+          test "$ERRS" = "0"
+
+      # Compiler diagnostics become annotations, visible without downloading any artifact.
+      - name: Surface compiler diagnostics
+        if: always()
+        run: |
+          set +e
+          grep -E "error [A-Z]+[0-9]+" StArray-Port/Reports/BuildLog.txt \
+            | sed 's/ \[\/.*//' | sort -u | head -25 > /tmp/errors.txt
+          echo "::notice::compiler errors: $(wc -l < /tmp/errors.txt)"
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            echo "::error::$(echo "$line" | tr -d '\r')"
+          done < /tmp/errors.txt
+
+          grep -E "warning CS" StArray-Port/Reports/BuildLog.txt \
+            | sed 's/ \[\/.*//' | sort -u | head -10 > /tmp/warnings.txt
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            echo "::warning::$(echo "$line" | tr -d '\r')"
+          done < /tmp/warnings.txt
+
+          tail -6 StArray-Port/Reports/BuildLog.txt | tr -d '\r' | sed 's/^/    /' > /tmp/tail.txt
+          while IFS= read -r line; do echo "::notice::TAIL$line"; done < /tmp/tail.txt
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: StArray-Port/Reports/BuildLog.txt
+
+      - name: Verify generated hook surface
+        if: steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          DLL=$(find StArray-Port/Source/bin -name 'FirstPersonCameraMod.dll' | head -1)
+          strings -a "$DLL" | grep -q 'OnManualUpdateOriginal' || { echo "::error::generated hook trampoline missing"; exit 1; }
+          strings -a "$DLL" | grep -q 'InstallHooks' || { echo "::error::generated InstallHooks missing"; exit 1; }
+          strings -a "$DLL" | grep -q 'ModEntryPointAttribute' || { echo "::error::ModEntryPoint missing"; exit 1; }
+          strings -a "$DLL" | grep -q 'IModPlugin' || { echo "::error::IModPlugin missing"; exit 1; }
+          if strings -a "$DLL" | grep -qi 'MelonLoader'; then
+            echo "::error::MelonLoader reference found in output"
+            exit 1
+          fi
+          echo "::notice::output verified: IModPlugin + ModEntryPoint + generated hook trampoline, no MelonLoader"
+
+      - name: Upload mod DLL
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FirstPersonCameraMod
+          path: StArray-Port/Source/bin/**/FirstPersonCameraMod.dll
+
+      - name: Publish DLL and log into the repo
+        if: always()
+        run: |
+          set +e
+          SRC=$(find StArray-Port/Source/bin -name 'FirstPersonCameraMod.dll' | head -1)
+          echo "found DLL: ${SRC:-<none>} (build outcome: ${{ steps.build.outcome }})"
+
+          if [ "${{ steps.build.outcome }}" = "success" ] && [ -n "$SRC" ]; then
+            mkdir -p StArray-Port/Build
+            cp "$SRC" StArray-Port/Build/FirstPersonCameraMod.dll
+            ls -l StArray-Port/Build/FirstPersonCameraMod.dll
+          fi
+
+          git config user.name "starray-build-bot"
+          git config user.email "build-bot@users.noreply.github.com"
+          git add -f StArray-Port/Reports/BuildLog.txt
+          if [ "${{ steps.build.outcome }}" = "success" ] && [ -n "$SRC" ]; then
+            git add -f StArray-Port/Build/FirstPersonCameraMod.dll
+          fi
+
+          if git diff --cached --quiet; then
+            echo "::notice::nothing to publish"
+            exit 0
+          fi
+
+          git commit -q -m "build: compiler log + DLL (build outcome: ${{ steps.build.outcome }})"
+          if git push origin "HEAD:${{ github.ref_name }}" > /tmp/push.log 2>&1; then
+            echo "::notice::published build output to ${{ github.ref_name }}"
+          else
+            echo "::error::git push failed: $(tr '\n' ' ' < /tmp/push.log | head -c 900)"
+          fi
+
+      - name: Fail if the build failed
+        if: steps.build.outcome != 'success'
+        run: exit 1
