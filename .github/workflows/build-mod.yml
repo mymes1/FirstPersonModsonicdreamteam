@@ -79,12 +79,18 @@ jobs:
             exit 1
           fi
 
-          echo "── port sources must not use the MelonLoader stack ──"
-          if grep -rnE 'using MelonLoader|HarmonyLib|Il2CppInterop|Il2CppCinemachine|Il2CppHardlightProject|OnInitializeMelon' \
-               StArray-Port/Source --include='*.cs' --include='*.csproj'; then
+          echo "── port sources must not use the MelonLoader stack (code, not comments) ──"
+          # Documentation legitimately names the old APIs when explaining the port, so only
+          # non-comment lines count as a violation.
+          VIOLATIONS=$(grep -rnE 'using MelonLoader|HarmonyLib|Il2CppInterop|Il2CppCinemachine|Il2CppHardlightProject|OnInitializeMelon|MelonPreferences' \
+               StArray-Port/Source --include='*.cs' --include='*.csproj' \
+               | grep -vE ':[0-9]+:[[:space:]]*(///|//|\*|/\*)' || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "$VIOLATIONS"
             echo "::error::MelonLoader / Harmony / interop reference in the port"
             exit 1
           fi
+          echo "  port sources are free of MelonLoader / Harmony / interop code references"
 
           echo "::notice::hygiene gate passed"
 
