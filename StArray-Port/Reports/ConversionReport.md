@@ -12,7 +12,7 @@
 | Item | Value |
 |---|---|
 | Output | `StArray-Port/Build/FirstPersonCameraMod.dll` |
-| Size / SHA-256 | 53,760 bytes / `d2eca3675530bff93cf7da9b5d408fb6defac4cfe93604246ea934e3153f7ac1` |
+| Size / SHA-256 | 58,880 bytes / `108fc2ea75c7c034d450ecb0a0c51d06b7573991b683373b35b73381cc78ee37` |
 | Target framework | `.NETCoreApp,Version=v10.0` (baked into the assembly; matches the CoreCLR 10.0.6 the StArray Android AAR ships) |
 | Compiler | .NET SDK 10 (GitHub Actions `ubuntu-latest`), `dotnet build -c Release` |
 | References | `StArray.ModManager.dll`, `ImGui.NET.dll` — both extracted from the **real** release `modmanager-android.zip` 1.0.6 |
@@ -107,6 +107,7 @@ Source/
   Runtime/  Il2Cpp.cs / Il2CppNative.cs     invocation + method cache + transcribed il2cpp exports
             Il2CppObject.cs                 ObjectHandle (GC root), Il2CppObject, TransformRef
             GameApi.cs                      cached binds for Unity + game members, UnityTime/UnityApi
+            ClassIndex.cs                   namespace→class resolution across every loaded image
             ActorRef.cs                     Hardlight.Actor view
             StArrayBridge.cs                cached, non-fatal access to StArray internals
             TouchLook.cs / PointerLook       touch drag + legacy mouse axes
@@ -145,3 +146,24 @@ resolve failure is logged rather than thrown.
 
 No dependency DLLs are shipped: `StArray.ModManager.dll` and `ImGui.NET.dll` come from the manager
 itself, and nothing else is referenced. See `StArray-Port/Build/RequiredDependencies/README.md`.
+
+---
+
+## Repo hygiene (stale artifacts)
+
+This repository had a committed **Debug/net6.0 MelonLoader build** (`bin/`, `obj/`) from the desktop
+mod, with no `.gitignore`. That is not harmless: MSBuild evaluates `Compile` globs and stale
+`obj/*.AssemblyInfo.cs` / generated editorconfig files can feed an old assembly identity into a new
+build. It bit this port once — a build produced a 17 KB DLL containing the *original* MelonLoader mod
+instead of the port, because `**/*.cs` picked up a generated file from `obj/`.
+
+Fixes applied:
+
+- `bin/` and `obj/` removed from the repository and from the build tree.
+- Root `.gitignore` covering build output, staged reference assemblies and IDE noise, with an explicit
+  exception for the deliverable `StArray-Port/Build/*.dll`.
+- `StArray-Port/Source/FirstPersonCameraMod.csproj` compiles only `Runtime/ Camera/ Hooks/ Plugin/
+  Diagnostics/` — never a recursive `**/*.cs` glob.
+- CI runs a **hygiene gate** before building: fails on committed `bin`/`obj`, on any MelonLoader /
+  Harmony / interop reference in port *code* (comments are allowed to name them), and verifies the
+  original desktop source is untouched.
